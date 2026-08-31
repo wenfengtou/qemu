@@ -716,10 +716,15 @@ void Esp32_WLAN_handle_frame(Esp32WifiState *s, struct mac80211_frame *frame)
             }
         }
     }
-    if ((frame->frame_control.type == IEEE80211_TYPE_DATA) &&
-        (frame->frame_control.sub_type == IEEE80211_TYPE_DATA_SUBTYPE_DATA)) {
+    if (frame->frame_control.type == IEEE80211_TYPE_DATA &&
+        (frame->frame_control.sub_type == IEEE80211_TYPE_DATA_SUBTYPE_DATA ||
+         frame->frame_control.sub_type == IEEE80211_TYPE_DATA_SUBTYPE_QOS_DATA)) {
+        /* QoS Data 帧(subtype 0x08)在 24 字节 MAC 头后多 2 字节 QoS Control，
+         * LLC/SNAP(8B) 与载荷起点整体后移 2 字节；普通 Data 帧(0x00)无此偏移。 */
+        int qos_off = (frame->frame_control.sub_type ==
+                       IEEE80211_TYPE_DATA_SUBTYPE_QOS_DATA) ? 2 : 0;
         if(s->ap_state == Esp32_WLAN__STATE_STA_DHCP) {
-            dhcp_request_t *req=(dhcp_request_t *)&frame->data_and_fcs[8];
+            dhcp_request_t *req=(dhcp_request_t *)&frame->data_and_fcs[8 + qos_off];
             // check for a dhcp offer
             if(req->dhcp.bp_options[0]==0x35 && req->dhcp.bp_options[2]==0x2) {
                 mac80211_frame *frame1=Esp32_WLAN_create_dhcp_request(s,req->dhcp.yiaddr);
@@ -743,9 +748,9 @@ void Esp32_WLAN_handle_frame(Esp32WifiState *s, struct mac80211_frame *frame)
             * If we ever want the access point to offer
             * some services, it can be added here!!
             */
-            // ethernet header type
-            ethernet_frame[12] = frame->data_and_fcs[6];
-            ethernet_frame[13] = frame->data_and_fcs[7];
+            // ethernet header type (QoS Data 帧的 ethertype 后移 2 字节)
+            ethernet_frame[12] = frame->data_and_fcs[6 + qos_off];
+            ethernet_frame[13] = frame->data_and_fcs[7 + qos_off];
 
             // the new originator of the packet is
             // the access point
@@ -754,24 +759,20 @@ void Esp32_WLAN_handle_frame(Esp32WifiState *s, struct mac80211_frame *frame)
             else
                 memcpy(&ethernet_frame[6], s->macaddr, 6);
 
-            if (ethernet_frame[12] == 0x08 && ethernet_frame[13] == 0x06) {
-                // for arp request, we use a broadcast
-                memset(&ethernet_frame[0], 0xff, 6);
-            } else {
-                // otherwise we forward the packet to
-                // where it really belongs
-                memcpy(&ethernet_frame[0], frame->destination_address, 6);
-            }
+            /* ToDS 数据帧(flags bit0=1)地址字段：
+             *   addr1 = destination_address = 接收方 AP 的 MAC (RA)
+             *   addr2 = source_address      = 发送方 station 的 MAC (SA/TA)
+             *   addr3 = bssid_address       = 最终以太网目的地址 (DA)
+             * 桥接成 802.3 帧送给 slirp 时，目的 MAC 必须取 addr3(DA)，
+             * 而不是 addr1(AP 自身 MAC)，否则单播帧会被 slirp 丢弃。 */
+            memcpy(&ethernet_frame[0], frame->bssid_address, 6);
 
-            // add packet content
-            ethernet_frame_size = frame->frame_length - IEEE80211_HEADER_SIZE - 4 - 8;
-
-            // for some reason, the packet is 22 bytes too small (??)
-            ethernet_frame_size += 22;
-            if (ethernet_frame_size > sizeof(ethernet_frame)) {
-                ethernet_frame_size = sizeof(ethernet_frame);
+            // IP/ARP 载荷长度 = 整帧 - 802.11头(24) - FCS(4) - LLC/SNAP(8) [- QoS(2)]
+            ethernet_frame_size = frame->frame_length - IEEE80211_HEADER_SIZE - 4 - 8 - qos_off;
+            if (ethernet_frame_size > sizeof(ethernet_frame) - 14) {
+                ethernet_frame_size = sizeof(ethernet_frame) - 14;
             }
-            memcpy(&ethernet_frame[14], &frame->data_and_fcs[8], ethernet_frame_size);
+            memcpy(&ethernet_frame[14], &frame->data_and_fcs[8 + qos_off], ethernet_frame_size);
             // add size of ethernet header
             ethernet_frame_size += 14;
             /*
