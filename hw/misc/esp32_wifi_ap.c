@@ -372,10 +372,15 @@ static ssize_t Esp32_WLAN_receive(NetClientState *ncs,
     if (frame) {
         if(s->mode == Esp32_Mode_Station){
              memcpy(s->ap_macaddr,s->associated_ap_macaddr,6);
-        
+
             if(s->ap_state==Esp32_WLAN__STATE_STA_ASSOCIATED) {
-                frame->frame_control.flags=1;
-                // if it's an arp request put the correct reply mac address in the packet 
+                /* Downlink frame from the AP (slirp) to the station: the
+                 * FromDS bit (0x2) must be set, NOT ToDS (0x1). Newer lwIP/
+                 * Arduino-ESP32 stacks drop data frames whose direction flag
+                 * is wrong, so the DHCP offer/ACK broadcast frames never got
+                 * accepted. create_data_packet() already sets 0x2; keep it. */
+                frame->frame_control.flags=0x2;
+                // if it's an arp request put the correct reply mac address in the packet
                 if( frame->data_and_fcs[6]==8 && frame->data_and_fcs[7]==6) {
                     memcpy(frame->data_and_fcs+16,s->macaddr,6);
                 }
@@ -385,7 +390,7 @@ static ssize_t Esp32_WLAN_receive(NetClientState *ncs,
             memcpy(frame->destination_address, s->softap_macaddr,6);
             if(s->ap_state==Esp32_WLAN__STATE_STA_ASSOCIATED) {
                 frame->frame_control.flags=1;
-                // if it's an arp request put the correct reply mac address in the packet 
+                // if it's an arp request put the correct reply mac address in the packet
                 if( frame->data_and_fcs[6]==8 && frame->data_and_fcs[7]==6) {
                     memcpy(frame->data_and_fcs+16,s->ap_macaddr,6);
                 }
@@ -589,7 +594,7 @@ void Esp32_WLAN_handle_frame(Esp32WifiState *s, struct mac80211_frame *frame)
     }
 
     Esp32_WLAN_Set_Packet_Status(ESP32_PHYA_ACK);
-    if(frame->frame_control.type == IEEE80211_TYPE_MGT) {        
+    if(frame->frame_control.type == IEEE80211_TYPE_MGT) {
         switch(frame->frame_control.sub_type) {
             case IEEE80211_TYPE_MGT_SUBTYPE_BEACON:
                 if(s->ap_state==Esp32_WLAN__STATE_NOT_AUTHENTICATED || s->ap_state==Esp32_WLAN__STATE_AUTHENTICATED) {
