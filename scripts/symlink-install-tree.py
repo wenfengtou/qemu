@@ -30,7 +30,17 @@ for source, dest in json.loads(out).items():
     except BaseException as e:
         if not isinstance(e, OSError) or e.errno != errno.EEXIST:
             if os.name == 'nt':
-                print('Please enable Developer Mode to support soft link '
-                      'without Administrator permission')
+                # Windows without Developer Mode/admin cannot create
+                # symlinks. Copy data files that already exist; skip
+                # entries whose source has not been built yet.
+                if not os.path.lexists(bundle_dest):
+                    if os.path.isfile(source):
+                        try:
+                            import shutil
+                            shutil.copyfile(source, bundle_dest)
+                        except BaseException as copy_err:
+                            print(f'warning: could not copy {dest}: {copy_err}',
+                                  file=sys.stderr)
+                continue
             print(f'error making symbolic link {dest}', file=sys.stderr)
             raise e

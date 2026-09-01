@@ -1219,7 +1219,7 @@ slirp = not_found
 if not get_option('slirp').auto() or have_system
   slirp_dep = dependency('slirp', required: get_option('slirp'),
                      method: 'pkg-config',
-                     static: true)
+                     static: false)
 
   # https://gitlab.freedesktop.org/slirp/libslirp/-/merge_requests/134
   slirp_cflags = []
