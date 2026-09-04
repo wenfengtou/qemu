@@ -39,21 +39,11 @@
 
 ## 2. fork QEMU 编译（Windows 构建修复）
 
-### 2.1 三处源码修改
+### 2.1 两处源码修改
 
-直接 `configure && ninja` 在 Windows 上会遇到三个问题，均已修复并提交：
+直接 `configure && ninja` 在 Windows 上会遇到两个问题，均已修复并提交：
 
-1. **`hw/xtensa/sim.c`：两个默认机型触发断言**
-   分支合并后 `sim` 机型和 `esp32` 机型都设了 `mc->is_default = true`，启动时
-   `find_default_machine()` 断言。把 sim 改为非默认：
-   ```c
-   mc->desc = "sim machine (" XTENSA_DEFAULT_CPU_MODEL ")";
-   /* esp32 is the default machine in this fork; two defaults trip an
-    * assertion in find_default_machine() */
-   mc->is_default = false;
-   ```
-
-2. **`meson.build`：slirp 静态链接导致 glib 符号多重定义**
+1. **`meson.build`：slirp 静态链接导致 glib 符号多重定义**
    MinGW 下静态 libslirp 与 QEMU 的 glib 符号冲突，链接期报大量
    `multiple definition of 'g_*'`。改为动态链接：
    ```meson
@@ -62,7 +52,7 @@
                           static: false)
    ```
 
-3. **`scripts/symlink-install-tree.py`：Windows 无管理员/开发者模式无法建符号链接**
+2. **`scripts/symlink-install-tree.py`：Windows 无管理员/开发者模式无法建符号链接**
    回退为文件复制：
    ```python
    if os.name == 'nt':
@@ -257,12 +247,14 @@ Body length: 559 bytes
 
 ```
 65d68c0 build: fix MSYS2/mingw Windows build
-        （sim.c 默认机型、meson slirp 动态链接、symlink 回退复制）
+        （meson slirp 动态链接、symlink 回退复制）
 0db01f6 wifi-ap: set FromDS (0x2) on downlink frames to the station
         （核心 WiFi 修复，解决 Arduino-ESP32 3.x DHCP 超时）
+2b11e3a revert sim.c is_default change to keep upstream code untouched
+        （按用户要求恢复 sim.c 为上游原样，不修改原始代码）
 ```
 
-> 两个提交目前仅在本地，未推送远端。
+> 提交目前仅在本地，未推送远端。
 
 ---
 

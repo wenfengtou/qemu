@@ -46,9 +46,9 @@ pacman -S --needed \
 
 dtc（libfdt）等少量依赖由 QEMU 的 subproject 机制或系统包提供；`keycodemapdb` 等子项目在配置阶段自动拉取。
 
-## 三、为 Windows 编译做的 3 处源码修改
+## 三、为 Windows 编译做的 2 处源码修改
 
-直接 `configure && ninja` 在 Windows 上会遇到三个问题，均已修复：
+直接 `configure && ninja` 在 Windows 上会遇到两个问题，均已修复：
 
 ### 1. 符号链接安装脚本失败（Windows 无管理员/开发者模式权限）
 
@@ -78,18 +78,6 @@ MinGW 下静态 libslirp 与 QEMU 自身链接的 glib 符号冲突，链接期�
 slirp_dep = dependency('slirp', required: get_option('slirp'),
                        method: 'pkg-config',
                        static: false)
-```
-
-### 3. 两个默认机型触发断言（`Multiple default machines`）
-
-分支合并后 `hw/xtensa/sim.c`（上游自带的 sim 机型）和 `hw/xtensa/esp32.c`（ESP32 机型）都设置了 `mc->is_default = true`，QEMU 启动时在 `find_default_machine()` 触发断言。把 sim 机型改为非默认：
-
-```c
-/* hw/xtensa/sim.c */
-mc->desc = "sim machine (" XTENSA_DEFAULT_CPU_MODEL ")";
-/* esp32 is the default machine in this fork; two defaults trip an
- * assertion in find_default_machine() */
-mc->is_default = false;
 ```
 
 ## 四、配置与编译命令
