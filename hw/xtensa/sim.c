@@ -119,9 +119,7 @@ static void xtensa_sim_init(MachineState *machine)
 static void xtensa_sim_machine_init(MachineClass *mc)
 {
     mc->desc = "sim machine (" XTENSA_DEFAULT_CPU_MODEL ")";
-    /* esp32 is the default machine in this fork; two defaults trip an
-     * assertion in find_default_machine() */
-    mc->is_default = false;
+    mc->is_default = true;
     mc->init = xtensa_sim_init;
     mc->max_cpus = 4;
     mc->no_serial = 1;
