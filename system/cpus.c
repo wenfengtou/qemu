@@ -544,6 +544,20 @@ void bql_unlock(void)
     qemu_mutex_unlock(&bql);
 }
 
+/*
+ * Compatibility aliases for the pre-9.0 iothread lock naming.
+ * PICSimLab 0.9.2 (241005) resolves these symbols by name.
+ */
+void qemu_mutex_lock_iothread_impl(const char *file, int line)
+{
+    bql_lock_impl(file, line);
+}
+
+void qemu_mutex_unlock_iothread(void)
+{
+    bql_unlock();
+}
+
 void qemu_cond_wait_bql(QemuCond *cond)
 {
     qemu_cond_wait(cond, &bql);
